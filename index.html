@@ -1,5 +1,949 @@
-<html>
-  <p>
-    Absensi GSI is here
-  </p>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absensi Driver</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- SheetJS (xlsx) for Excel Export -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- Day.js for date manipulation -->
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isSameOrBefore.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/id.js"></script>
+    <script>
+        dayjs.extend(window.dayjs_plugin_isSameOrBefore);
+        dayjs.locale('id'); // Gunakan bahasa Indonesia
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom scrollbar untuk tabel */
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Style untuk input waktu native agar konsisten */
+        input[type="time"] {
+            appearance: none;
+            -webkit-appearance: none;
+            color: #1f2937;
+            font-family: inherit;
+        }
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(2px);
+        }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-indigo-600 text-white shadow-md z-10 sticky top-0">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <i class="ph ph-car-profile text-3xl"></i>
+                    <div>
+                        <h1 class="font-bold text-lg leading-tight">Absensi Driver</h1>
+                        <p class="text-xs text-indigo-200" id="header-driver-name">Menunggu otentikasi...</p>
+                    </div>
+                </div>
+                <!-- Navigation Tabs (Only visible when logged in via route) -->
+                <nav class="hidden md:flex space-x-1" id="nav-tabs" style="display: none;">
+                    <button onclick="switchTab('daily')" id="tab-daily" class="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-indigo-800 text-white hover:bg-indigo-700">
+                        <i class="ph ph-calendar-check mr-1"></i> Harian
+                    </button>
+                    <button onclick="switchTab('monthly')" id="tab-monthly" class="px-3 py-2 rounded-md text-sm font-medium transition-colors text-indigo-100 hover:bg-indigo-700 hover:text-white">
+                        <i class="ph ph-table mr-1"></i> Laporan
+                    </button>
+                    <button onclick="switchTab('settings')" id="tab-settings" class="px-3 py-2 rounded-md text-sm font-medium transition-colors text-indigo-100 hover:bg-indigo-700 hover:text-white">
+                        <i class="ph ph-gear mr-1"></i> Pengaturan
+                    </button>
+                </nav>
+                
+                <!-- Mobile menu button -->
+                <div class="md:hidden flex items-center" id="mobile-menu-btn-container" style="display: none;">
+                    <button onclick="toggleMobileMenu()" class="text-indigo-100 hover:text-white p-2">
+                        <i class="ph ph-list text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Mobile Navigation Menu -->
+        <div class="md:hidden hidden bg-indigo-700 pb-3 px-2 pt-2 space-y-1" id="mobile-menu">
+            <button onclick="switchTab('daily'); toggleMobileMenu()" id="mobile-tab-daily" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium bg-indigo-800 text-white">
+                <i class="ph ph-calendar-check mr-2"></i> Harian
+            </button>
+            <button onclick="switchTab('monthly'); toggleMobileMenu()" id="mobile-tab-monthly" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-indigo-100 hover:bg-indigo-600">
+                <i class="ph ph-table mr-2"></i> Laporan Bulanan
+            </button>
+            <button onclick="switchTab('settings'); toggleMobileMenu()" id="mobile-tab-settings" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-indigo-100 hover:bg-indigo-600">
+                <i class="ph ph-gear mr-2"></i> Pengaturan
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto w-full relative">
+        <div class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+            
+            <!-- Loading Indicator -->
+            <div id="loading-spinner" class="flex flex-col items-center justify-center py-20">
+                <i class="ph ph-spinner-gap animate-spin text-4xl text-indigo-600 mb-4"></i>
+                <p class="text-gray-500">Memuat data...</p>
+            </div>
+
+            <!-- Error State (e.g. invalid route) -->
+            <div id="error-view" class="hidden flex flex-col items-center justify-center py-20 text-center">
+                <i class="ph ph-warning-circle text-5xl text-red-500 mb-4"></i>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Akses Ditolak</h2>
+                <p class="text-gray-600 max-w-md mx-auto" id="error-message">
+                    Silakan gunakan link yang benar untuk mengakses halaman ini. (Contoh: /#/emp-rio atau /#/emp-deryl)
+                </p>
+            </div>
+
+            <!-- VIEW: Daily Input -->
+            <div id="view-daily" class="hidden max-w-md mx-auto">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+                    <div class="bg-indigo-50 px-5 py-4 border-b border-indigo-100 flex justify-between items-center">
+                        <div>
+                            <h2 class="text-lg font-semibold text-indigo-900" id="daily-date-display">Hari ini</h2>
+                            <p class="text-sm text-indigo-600 font-medium" id="daily-date-full">...</p>
+                        </div>
+                        <button onclick="changeDailyDate()" class="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full transition-colors" title="Pilih Tanggal Lain">
+                            <i class="ph ph-calendar-blank text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="p-5 space-y-6">
+                        <!-- Date Picker (Hidden by default) -->
+                        <div id="daily-date-picker-container" class="hidden">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Tanggal</label>
+                            <input type="date" id="daily-date-input" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                        </div>
+
+                        <!-- Check In Section -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                <i class="ph ph-sign-in text-green-500 mr-2"></i> Jam Masuk
+                            </label>
+                            <div class="flex space-x-2">
+                                <input type="time" id="input-jam-masuk" class="flex-1 border border-gray-300 rounded-lg p-3 text-lg text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-50">
+                                <button onclick="setNow('input-jam-masuk')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center whitespace-nowrap">
+                                    Sekarang
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Check Out Section -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                <i class="ph ph-sign-out text-red-500 mr-2"></i> Jam Pulang
+                            </label>
+                            <div class="flex space-x-2">
+                                <input type="time" id="input-jam-pulang" class="flex-1 border border-gray-300 rounded-lg p-3 text-lg text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-50">
+                                <button onclick="setNow('input-jam-pulang')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center whitespace-nowrap">
+                                    Sekarang
+                                </button>
+                            </div>
+                        </div>
+
+                        <hr class="border-gray-200">
+
+                        <!-- Overtime Section -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                <i class="ph ph-clock-afternoon text-orange-500 mr-2"></i> Lembur
+                            </label>
+                            <div class="grid grid-cols-2 gap-4 mb-3">
+                                <div>
+                                    <span class="block text-xs text-gray-500 mb-1">Mulai</span>
+                                    <input type="time" id="input-lembur-mulai" class="w-full border border-gray-300 rounded-lg p-2 text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-50">
+                                </div>
+                                <div>
+                                    <span class="block text-xs text-gray-500 mb-1">Selesai</span>
+                                    <input type="time" id="input-lembur-selesai" class="w-full border border-gray-300 rounded-lg p-2 text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-50">
+                                </div>
+                            </div>
+                            <div class="flex items-center bg-orange-50 p-3 rounded-lg border border-orange-100">
+                                <span class="text-sm text-orange-800 font-medium mr-auto">Total Jam Lembur:</span>
+                                <input type="number" id="input-jam-lembur" step="0.5" min="0" class="w-20 border border-orange-300 rounded-md p-1 text-center font-bold text-orange-700 bg-white" placeholder="0">
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">*Isi Manual jam lembur, atau akan dihitung otomatis jika Anda menekan Simpan dan jam pulang > 17:00 (jika jam masuk terisi).</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-5 border-t border-gray-200">
+                        <button onclick="saveDailyData()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-sm transition-colors flex items-center justify-center text-lg">
+                            <i class="ph ph-floppy-disk mr-2"></i> Simpan Absensi
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Monthly Report -->
+            <div id="view-monthly" class="hidden">
+                
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6 flex flex-col md:flex-row justify-between items-center p-4">
+                    <div class="flex items-center space-x-4 mb-4 md:mb-0">
+                        <label class="font-medium text-gray-700">Pilih Bulan:</label>
+                        <input type="month" id="report-month-selector" class="border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-gray-50">
+                    </div>
+                    
+                    <div class="flex space-x-3 w-full md:w-auto">
+                        <button onclick="refreshReport()" class="flex-1 md:flex-none bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center border border-gray-300">
+                            <i class="ph ph-arrows-clockwise mr-2"></i> Muat Ulang
+                        </button>
+                        <button onclick="exportToExcel()" class="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors flex items-center justify-center">
+                            <i class="ph ph-file-xls mr-2 text-xl"></i> Export Excel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Web Table View (Responsive) -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
+                    <!-- Overlay loading during data fetch -->
+                    <div id="table-loading-overlay" class="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center hidden">
+                        <i class="ph ph-spinner-gap animate-spin text-3xl text-indigo-600 mb-2"></i>
+                        <p class="text-sm text-gray-600 font-medium">Menghitung...</p>
+                    </div>
+
+                    <div class="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <h3 class="font-bold text-gray-800 text-lg">Preview Laporan</h3>
+                        <p class="text-sm text-gray-500">*Data disimpan otomatis saat diedit</p>
+                    </div>
+                    
+                    <div class="overflow-x-auto table-container">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th scope="col" class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-100 z-10">Tgl</th>
+                                    <th scope="col" class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Hari</th>
+                                    <th scope="col" class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider border-l border-gray-300">Masuk</th>
+                                    <th scope="col" class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Pulang</th>
+                                    <th scope="col" class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider bg-indigo-50">Upah Harian</th>
+                                    <th scope="col" class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider border-l border-gray-300">Lembur Mulai</th>
+                                    <th scope="col" class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Lembur Selesai</th>
+                                    <th scope="col" class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider bg-orange-50">Jam Lembur</th>
+                                    <th scope="col" class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider bg-orange-50">Upah Lembur</th>
+                                    <th scope="col" class="px-3 py-3 text-right text-xs font-bold text-indigo-700 uppercase tracking-wider bg-indigo-100 border-l border-gray-300">Total Upah</th>
+                                </tr>
+                            </thead>
+                            <tbody id="report-table-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Data will be injected here -->
+                            </tbody>
+                            <tfoot class="bg-gray-50 border-t-2 border-gray-300 font-bold">
+                                <tr>
+                                    <td colspan="4" class="px-3 py-4 text-right text-gray-700 uppercase">Total:</td>
+                                    <td id="total-upah-harian" class="px-3 py-4 text-right text-gray-900 bg-indigo-50">Rp 0</td>
+                                    <td colspan="2"></td>
+                                    <td id="total-jam-lembur" class="px-3 py-4 text-center text-orange-800 bg-orange-50">0 Jam</td>
+                                    <td id="total-upah-lembur" class="px-3 py-4 text-right text-orange-900 bg-orange-50">Rp 0</td>
+                                    <td id="grand-total-upah" class="px-3 py-4 text-right text-indigo-900 bg-indigo-100 text-base">Rp 0</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Settings -->
+            <div id="view-settings" class="hidden max-w-lg mx-auto">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
+                        <h2 class="text-lg font-bold text-gray-800 flex items-center">
+                            <i class="ph ph-sliders-horizontal mr-2"></i> Pengaturan Driver
+                        </h2>
+                    </div>
+                    <div class="p-5 space-y-5">
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">User ID / Route</label>
+                            <input type="text" id="setting-user-id" disabled class="w-full border border-gray-200 rounded-lg p-2 bg-gray-100 text-gray-500 font-mono cursor-not-allowed">
+                            <p class="text-xs text-gray-500 mt-1">Ditetapkan dari URL.</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap Driver</label>
+                            <input type="text" id="setting-nama" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-gray-50">
+                            <p class="text-xs text-gray-500 mt-1">Akan dicetak di laporan Excel.</p>
+                        </div>
+
+                        <hr class="border-gray-200">
+                        <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider">Tarif Upah</h3>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1 flex justify-between">
+                                <span>Upah Harian Normal (Rp)</span>
+                            </label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-500 sm:text-sm">Rp</span>
+                                </div>
+                                <input type="number" id="setting-upah-harian" min="0" class="w-full border border-gray-300 rounded-lg py-2 pl-10 pr-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-gray-50">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1 flex justify-between">
+                                <span>Upah Lembur per Jam (Rp)</span>
+                            </label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-500 sm:text-sm">Rp</span>
+                                </div>
+                                <input type="number" id="setting-upah-lembur" min="0" class="w-full border border-gray-300 rounded-lg py-2 pl-10 pr-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-gray-50">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-5 border-t border-gray-200 flex justify-end">
+                        <button onclick="saveSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded-lg shadow-sm transition-colors flex items-center">
+                            <i class="ph ph-check-circle mr-2"></i> Simpan Pengaturan
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Custom Modal/Toast UI -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <script type="module">
+        // Firebase Setup
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, query, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Environment variables provided by Immersive
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'absensi-gsi-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth;
+        let currentUserUid = null;
+        let empRouteId = null; // The ID from URL hash e.g., 'emp-rio'
+        
+        // Application State
+        const state = {
+            settings: {
+                namaLengkap: 'Driver',
+                upahHarian: 150000,
+                upahLemburPerJam: 20000
+            },
+            currentTab: 'daily',
+            dailyDate: dayjs().format('YYYY-MM-DD'),
+            monthlyReportMonth: dayjs().format('YYYY-MM'),
+            monthlyData: {} // Cache for current month's data
+        };
+
+        // Export globals for inline HTML event handlers
+        window.switchTab = switchTab;
+        window.toggleMobileMenu = toggleMobileMenu;
+        window.setNow = setNow;
+        window.changeDailyDate = changeDailyDate;
+        window.saveDailyData = saveDailyData;
+        window.refreshReport = loadMonthlyData;
+        window.exportToExcel = exportToExcel;
+        window.saveSettings = saveSettings;
+        window.handleTableEdit = handleTableEdit;
+
+        // Utility: Toast Notification (Replacing alert)
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgColor = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : 'bg-indigo-600');
+            const icon = type === 'success' ? 'ph-check-circle' : (type === 'error' ? 'ph-warning-circle' : 'ph-info');
+
+            toast.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 transform transition-all duration-300 translate-y-10 opacity-0`;
+            toast.innerHTML = `
+                <i class="ph ${icon} text-xl"></i>
+                <span class="font-medium">${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Animate in
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            });
+
+            // Animate out and remove
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Utility: Format Currency
+        function formatRupiah(number) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
+        }
+
+        // Initialize Application
+        async function initApp() {
+            if (!firebaseConfig) {
+                showError("Konfigurasi database tidak ditemukan.");
+                return;
+            }
+
+            try {
+                // Parse routing from hash
+                const hash = window.location.hash;
+                if (!hash || !hash.startsWith('#/emp-')) {
+                    showError("Invalid Route. Gunakan link spesifik seperti /#/emp-rio");
+                    return;
+                }
+                
+                empRouteId = hash.replace('#/', ''); // e.g., 'emp-rio'
+                
+                // Init Firebase
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Authenticate (Crucial for Firestore rules)
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                currentUserUid = auth.currentUser.uid;
+
+                // Load user specific settings
+                await loadSettings();
+                
+                // Setup UI Listeners
+                setupListeners();
+
+                // Hide Loading, Show App
+                document.getElementById('loading-spinner').classList.add('hidden');
+                document.getElementById('nav-tabs').style.display = 'flex';
+                document.getElementById('mobile-menu-btn-container').style.display = 'flex';
+                
+                // Initialize active tab
+                switchTab('daily');
+                
+            } catch (error) {
+                console.error("Initialization error:", error);
+                showError("Gagal memuat aplikasi: " + error.message);
+            }
+        }
+
+        function showError(msg) {
+            document.getElementById('loading-spinner').classList.add('hidden');
+            document.getElementById('error-view').classList.remove('hidden');
+            document.getElementById('error-message').textContent = msg;
+        }
+
+        // Firestore Helper: Get path to user's collection
+        function getUserDocRef(collectionName, docId) {
+            return doc(db, 'artifacts', appId, 'users', currentUserUid, `${empRouteId}_${collectionName}`, docId);
+        }
+        function getUserCollectionRef(collectionName) {
+            return collection(db, 'artifacts', appId, 'users', currentUserUid, `${empRouteId}_${collectionName}`);
+        }
+
+        async function loadSettings() {
+            try {
+                const settingsRef = getUserDocRef('config', 'profile');
+                const docSnap = await getDoc(settingsRef);
+                
+                if (docSnap.exists()) {
+                    state.settings = { ...state.settings, ...docSnap.data() };
+                } else {
+                    // Default naming based on route if new
+                    const defaultName = empRouteId.replace('emp-', '').toUpperCase();
+                    state.settings.namaLengkap = `Driver ${defaultName}`;
+                    await setDoc(settingsRef, state.settings);
+                }
+
+                // Update UI
+                document.getElementById('header-driver-name').textContent = state.settings.namaLengkap;
+                
+                // Populate Settings Form
+                document.getElementById('setting-user-id').value = empRouteId;
+                document.getElementById('setting-nama').value = state.settings.namaLengkap;
+                document.getElementById('setting-upah-harian').value = state.settings.upahHarian;
+                document.getElementById('setting-upah-lembur').value = state.settings.upahLemburPerJam;
+                
+            } catch (error) {
+                console.error("Error loading settings:", error);
+                showToast("Gagal memuat pengaturan", "error");
+            }
+        }
+
+        async function saveSettings() {
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="ph ph-spinner-gap animate-spin mr-2"></i> Menyimpan...';
+            btn.disabled = true;
+
+            try {
+                const newSettings = {
+                    namaLengkap: document.getElementById('setting-nama').value || 'Driver',
+                    upahHarian: parseInt(document.getElementById('setting-upah-harian').value) || 0,
+                    upahLemburPerJam: parseInt(document.getElementById('setting-upah-lembur').value) || 0
+                };
+
+                await setDoc(getUserDocRef('config', 'profile'), newSettings);
+                
+                state.settings = newSettings;
+                document.getElementById('header-driver-name').textContent = state.settings.namaLengkap;
+                showToast("Pengaturan berhasil disimpan");
+                
+                // Reload report if we are on report tab to reflect new pricing
+                if (state.currentTab === 'monthly') {
+                    loadMonthlyData();
+                }
+            } catch (error) {
+                console.error("Error saving settings:", error);
+                showToast("Gagal menyimpan pengaturan", "error");
+            } finally {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        }
+
+        async function loadDailyData(dateStr) {
+            // Reset form
+            document.getElementById('input-jam-masuk').value = '';
+            document.getElementById('input-jam-pulang').value = '';
+            document.getElementById('input-lembur-mulai').value = '';
+            document.getElementById('input-lembur-selesai').value = '';
+            document.getElementById('input-jam-lembur').value = '';
+
+            try {
+                const docRef = getUserDocRef('absensi', dateStr);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    document.getElementById('input-jam-masuk').value = data.jamMasuk || '';
+                    document.getElementById('input-jam-pulang').value = data.jamPulang || '';
+                    document.getElementById('input-lembur-mulai').value = data.lemburMulai || '';
+                    document.getElementById('input-lembur-selesai').value = data.lemburSelesai || '';
+                    document.getElementById('input-jam-lembur').value = data.jamLembur || '';
+                }
+            } catch (error) {
+                console.error("Error loading daily data:", error);
+            }
+        }
+
+        async function saveDailyData() {
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="ph ph-spinner-gap animate-spin mr-2"></i> Menyimpan...';
+            btn.disabled = true;
+
+            try {
+                const jamMasuk = document.getElementById('input-jam-masuk').value;
+                const jamPulang = document.getElementById('input-jam-pulang').value;
+                const lemburMulai = document.getElementById('input-lembur-mulai').value;
+                const lemburSelesai = document.getElementById('input-lembur-selesai').value;
+                let jamLembur = parseFloat(document.getElementById('input-jam-lembur').value) || 0;
+
+                // Auto calculate overtime if manual input is empty but checkin/out exists
+                if (jamLembur === 0 && jamMasuk && jamPulang) {
+                    jamLembur = calculateOvertimeLogic(jamPulang);
+                    if(jamLembur > 0) {
+                        document.getElementById('input-jam-lembur').value = jamLembur;
+                    }
+                }
+
+                const data = {
+                    date: state.dailyDate,
+                    jamMasuk,
+                    jamPulang,
+                    lemburMulai,
+                    lemburSelesai,
+                    jamLembur,
+                    timestamp: new Date().toISOString()
+                };
+
+                await setDoc(getUserDocRef('absensi', state.dailyDate), data);
+                showToast("Absensi tanggal " + dayjs(state.dailyDate).format('DD MMM') + " tersimpan!");
+            } catch (error) {
+                console.error("Error saving daily data:", error);
+                showToast("Gagal menyimpan data", "error");
+            } finally {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        }
+
+        async function loadMonthlyData() {
+            const yyyymm = document.getElementById('report-month-selector').value;
+            if(!yyyymm) return;
+            state.monthlyReportMonth = yyyymm;
+            
+            document.getElementById('table-loading-overlay').classList.remove('hidden');
+
+            try {
+                // We fetch all records and filter in memory as per rules
+                const q = query(getUserCollectionRef('absensi'));
+                const querySnapshot = await getDocs(q);
+                
+                state.monthlyData = {};
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    // Filter by selected month string (YYYY-MM)
+                    if (data.date && data.date.startsWith(yyyymm)) {
+                        state.monthlyData[data.date] = data;
+                    }
+                });
+
+                renderMonthlyTable();
+            } catch (error) {
+                console.error("Error loading monthly data:", error);
+                showToast("Gagal memuat laporan", "error");
+            } finally {
+                document.getElementById('table-loading-overlay').classList.add('hidden');
+            }
+        }
+
+        function renderMonthlyTable() {
+            const tbody = document.getElementById('report-table-body');
+            tbody.innerHTML = '';
+            
+            const [year, month] = state.monthlyReportMonth.split('-');
+            const daysInMonth = dayjs(`${year}-${month}-01`).daysInMonth();
+            
+            let sumUpahHarian = 0;
+            let sumJamLembur = 0;
+            let sumUpahLembur = 0;
+
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateStr = `${year}-${month}-${String(i).padStart(2, '0')}`;
+                const dateObj = dayjs(dateStr);
+                const dayName = dateObj.format('dddd');
+                const isWeekend = dateObj.day() === 0 || dateObj.day() === 6; // Sunday or Saturday
+                
+                const data = state.monthlyData[dateStr] || {};
+                
+                // Calculations
+                const upahHarian = (data.jamMasuk || data.jamPulang) ? state.settings.upahHarian : 0;
+                const jamLembur = parseFloat(data.jamLembur) || 0;
+                const upahLembur = jamLembur * state.settings.upahLemburPerJam;
+                const totalUpahHari = upahHarian + upahLembur;
+
+                // Accumulate
+                sumUpahHarian += upahHarian;
+                sumJamLembur += jamLembur;
+                sumUpahLembur += upahLembur;
+
+                const tr = document.createElement('tr');
+                if (isWeekend) tr.classList.add('bg-pink-50'); // Weekend highlight
+                else tr.classList.add('hover:bg-gray-50');
+
+                // Helper to create input fields inside table
+                const createInput = (field, type, width = 'w-full') => {
+                    return `<input type="${type}" 
+                            value="${data[field] || ''}" 
+                            class="${width} bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:bg-white outline-none px-1 py-1 text-center font-mono text-sm transition-colors" 
+                            onchange="handleTableEdit('${dateStr}', '${field}', this.value)"
+                            ${type==='number'? 'step="0.5" min="0"' : ''}
+                            >`;
+                };
+
+                tr.innerHTML = `
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-900 font-medium sticky left-0 ${isWeekend ? 'bg-pink-50' : 'bg-white'} z-0 shadow-[1px_0_0_0_#e5e7eb]">${i}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-500">${dayName.toUpperCase()}</td>
+                    <td class="px-1 py-1 border-l border-gray-200">${createInput('jamMasuk', 'time')}</td>
+                    <td class="px-1 py-1">${createInput('jamPulang', 'time')}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-right text-gray-900 bg-indigo-50/30">${formatRupiah(upahHarian)}</td>
+                    <td class="px-1 py-1 border-l border-gray-200">${createInput('lemburMulai', 'time')}</td>
+                    <td class="px-1 py-1">${createInput('lemburSelesai', 'time')}</td>
+                    <td class="px-1 py-1 bg-orange-50/30">${createInput('jamLembur', 'number', 'w-16 mx-auto block')}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-right text-orange-800 bg-orange-50/30">${formatRupiah(upahLembur)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-right font-bold text-indigo-700 bg-indigo-50/50 border-l border-gray-200">${formatRupiah(totalUpahHari)}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            // Update footer totals
+            document.getElementById('total-upah-harian').textContent = formatRupiah(sumUpahHarian);
+            document.getElementById('total-jam-lembur').textContent = sumJamLembur + ' Jam';
+            document.getElementById('total-upah-lembur').textContent = formatRupiah(sumUpahLembur);
+            document.getElementById('grand-total-upah').textContent = formatRupiah(sumUpahHarian + sumUpahLembur);
+        }
+
+        // Inline edit handler for the monthly table
+        async function handleTableEdit(dateStr, field, value) {
+            // Update local state immediately for snappy feel
+            if (!state.monthlyData[dateStr]) {
+                state.monthlyData[dateStr] = { date: dateStr };
+            }
+            
+            // Basic Auto-calculate overtime in table if checking out late and lembur is 0 or empty
+            if (field === 'jamPulang') {
+                state.monthlyData[dateStr][field] = value;
+                const currentLembur = state.monthlyData[dateStr].jamLembur;
+                if (!currentLembur || parseFloat(currentLembur) === 0) {
+                     const calculated = calculateOvertimeLogic(value);
+                     if(calculated > 0) state.monthlyData[dateStr].jamLembur = calculated;
+                }
+            } else if (field === 'jamLembur') {
+                state.monthlyData[dateStr][field] = value ? parseFloat(value) : 0;
+            } else {
+                state.monthlyData[dateStr][field] = value;
+            }
+
+            // Re-render table to update calculations
+            renderMonthlyTable();
+
+            // Save to Firestore in background
+            try {
+                const docRef = getUserDocRef('absensi', dateStr);
+                const dataToSave = { ...state.monthlyData[dateStr], timestamp: new Date().toISOString() };
+                await setDoc(docRef, dataToSave, { merge: true });
+                // Optional: show tiny toast or indicator that it saved
+            } catch (error) {
+                console.error("Error saving inline edit:", error);
+                showToast("Gagal menyimpan perubahan ke server", "error");
+            }
+        }
+
+        function switchTab(tabId) {
+            state.currentTab = tabId;
+            
+            // Hide all views
+            ['daily', 'monthly', 'settings'].forEach(id => {
+                document.getElementById(`view-${id}`).classList.add('hidden');
+                // Reset desktop tab styles
+                const dTab = document.getElementById(`tab-${id}`);
+                if(dTab) {
+                    dTab.classList.remove('bg-indigo-800', 'text-white');
+                    dTab.classList.add('text-indigo-100');
+                }
+                // Reset mobile tab styles
+                const mTab = document.getElementById(`mobile-tab-${id}`);
+                if(mTab) {
+                    mTab.classList.remove('bg-indigo-800', 'text-white');
+                    mTab.classList.add('text-indigo-100');
+                }
+            });
+
+            // Show selected view
+            document.getElementById(`view-${tabId}`).classList.remove('hidden');
+            
+            // Active style for desktop
+            const activeDTab = document.getElementById(`tab-${tabId}`);
+            if(activeDTab){
+                activeDTab.classList.remove('text-indigo-100');
+                activeDTab.classList.add('bg-indigo-800', 'text-white');
+            }
+            
+            // Active style for mobile
+            const activeMTab = document.getElementById(`mobile-tab-${tabId}`);
+            if(activeMTab) {
+                 activeMTab.classList.remove('text-indigo-100');
+                 activeMTab.classList.add('bg-indigo-800', 'text-white');
+            }
+
+            // Tab specific logic
+            if (tabId === 'daily') {
+                updateDailyDateUI();
+                loadDailyData(state.dailyDate);
+            } else if (tabId === 'monthly') {
+                document.getElementById('report-month-selector').value = state.monthlyReportMonth;
+                loadMonthlyData();
+            }
+        }
+
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        function setNow(inputId) {
+            const now = dayjs().format('HH:mm');
+            document.getElementById(inputId).value = now;
+        }
+
+        function updateDailyDateUI() {
+            const d = dayjs(state.dailyDate);
+            document.getElementById('daily-date-display').textContent = d.isSame(dayjs(), 'day') ? 'Hari ini' : d.format('dddd');
+            document.getElementById('daily-date-full').textContent = d.format('DD MMMM YYYY');
+            document.getElementById('daily-date-input').value = state.dailyDate;
+        }
+
+        function changeDailyDate() {
+            const container = document.getElementById('daily-date-picker-container');
+            if (container.classList.contains('hidden')) {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        function setupListeners() {
+            // Hash change listener (for single page routing)
+            window.addEventListener('hashchange', () => {
+                window.location.reload(); // Simple approach: reload to re-init app with new route
+            });
+
+            // Date picker listener
+            document.getElementById('daily-date-input').addEventListener('change', (e) => {
+                if (e.target.value) {
+                    state.dailyDate = e.target.value;
+                    updateDailyDateUI();
+                    loadDailyData(state.dailyDate);
+                    document.getElementById('daily-date-picker-container').classList.add('hidden');
+                }
+            });
+
+            // Month selector listener
+            document.getElementById('report-month-selector').addEventListener('change', (e) => {
+                if(e.target.value) {
+                    loadMonthlyData();
+                }
+            });
+        }
+
+        // Logic helper: Auto calculate overtime (assuming normal end time is 17:00)
+        function calculateOvertimeLogic(jamPulang) {
+            if (!jamPulang) return 0;
+            const [hours, minutes] = jamPulang.split(':').map(Number);
+            if (hours >= 17) {
+                // Calculate difference from 17:00
+                const diffMin = ((hours - 17) * 60) + minutes;
+                // Round down to nearest 0.5 hour
+                return Math.floor(diffMin / 30) * 0.5;
+            }
+            return 0;
+        }
+
+        function exportToExcel() {
+            const yyyymm = state.monthlyReportMonth;
+            const [year, month] = yyyymm.split('-');
+            const monthName = dayjs(`${year}-${month}-01`).format('MMMM').toUpperCase();
+            const daysInMonth = dayjs(`${year}-${month}-01`).daysInMonth();
+            
+            const ws_data = [];
+            
+            // Custom Header matching the request
+            const titleRow = [`ABSENSI DRIVER CHAIRMAN : ${state.settings.namaLengkap.toUpperCase()}`, '', '', '', '', '', '', '', '', `( ${monthName} ${year} )`];
+            ws_data.push(titleRow);
+            ws_data.push([]); // Empty row
+            ws_data.push([`Made on : ${dayjs().format('DD-MMM-YY')}`]);
+            
+            // Table Headers (Complex Rowspan/Colspan setup using SheetJS concepts)
+            ws_data.push([
+                "HARI", "TGL", "BULAN", "HARI KERJA", 
+                "JAM KERJA NORMAL", "", "", 
+                "JAM KERJA LEMBUR", "", "", "", 
+                "PEMERIKSAAN & KEPUTUSAN PIMPINAN", "", ""
+            ]);
+            ws_data.push([
+                "", "", "", "", 
+                "JAM MASUK", "JAM PULANG", "UPAH HARIAN (RP)", 
+                "MULAI JAM", "SELESAI JAM", "JAM LEMBUR", "PARAF SUPIR", 
+                "UPAH LEMBUR (RP)", "UPAH HARIAN+LEMBUR (RP)", "PARAF PIMPINAN"
+            ]);
+
+            let sumUpahHarian = 0;
+            let sumUpahLembur = 0;
+
+            // Generate Data Rows
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateStr = `${year}-${month}-${String(i).padStart(2, '0')}`;
+                const dateObj = dayjs(dateStr);
+                const data = state.monthlyData[dateStr] || {};
+                
+                const upahHarian = (data.jamMasuk || data.jamPulang) ? state.settings.upahHarian : 0;
+                const jamLembur = parseFloat(data.jamLembur) || 0;
+                const upahLembur = jamLembur * state.settings.upahLemburPerJam;
+                const totalUpahHari = upahHarian + upahLembur;
+
+                sumUpahHarian += upahHarian;
+                sumUpahLembur += upahLembur;
+
+                const row = [
+                    dateObj.format('dddd').toUpperCase(),
+                    i,
+                    dateObj.format('MMM').toUpperCase(),
+                    "KE :",
+                    data.jamMasuk || "",
+                    data.jamPulang || "",
+                    upahHarian || "",
+                    data.lemburMulai || "",
+                    data.lemburSelesai || "",
+                    jamLembur || "",
+                    "", // Paraf Supir
+                    upahLembur || "",
+                    totalUpahHari || "",
+                    "" // Paraf Pimpinan
+                ];
+                ws_data.push(row);
+            }
+
+            // Footer / Totals Row
+            const footerRow = [
+                "TOTAL UPAH & LEMBUR :", "", "", "", "", "", 
+                sumUpahHarian, "", "", "", "", 
+                sumUpahLembur, sumUpahHarian + sumUpahLembur, ""
+            ];
+            ws_data.push(footerRow);
+
+            // Create Workbook & Worksheet
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(ws_data);
+
+            // Merges (A4:A5 for HARI, etc)
+            ws['!merges'] = [
+                { s: { r: 3, c: 4 }, e: { r: 3, c: 6 } }, // JAM KERJA NORMAL
+                { s: { r: 3, c: 7 }, e: { r: 3, c: 10 } }, // JAM KERJA LEMBUR
+                { s: { r: 3, c: 11 }, e: { r: 3, c: 13 } }, // PEMERIKSAAN
+                // Vertical merges for headers
+                { s: { r: 3, c: 0 }, e: { r: 4, c: 0 } }, // HARI
+                { s: { r: 3, c: 1 }, e: { r: 4, c: 1 } }, // TGL
+                { s: { r: 3, c: 2 }, e: { r: 4, c: 2 } }, // BULAN
+                { s: { r: 3, c: 3 }, e: { r: 4, c: 3 } }, // HARI KERJA
+                // Merge for Total text
+                { s: { r: ws_data.length - 1, c: 0 }, e: { r: ws_data.length - 1, c: 5 } },
+            ];
+
+            // Column Widths
+            ws['!cols'] = [
+                {wch: 10}, {wch: 5}, {wch: 8}, {wch: 10}, 
+                {wch: 12}, {wch: 12}, {wch: 18},
+                {wch: 12}, {wch: 12}, {wch: 12}, {wch: 12},
+                {wch: 18}, {wch: 22}, {wch: 18}
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, "Absensi");
+            XLSX.writeFile(wb, `Absensi_${state.settings.namaLengkap.replace(/\s+/g, '_')}_${monthName}_${year}.xlsx`);
+        }
+
+        // Start App
+        window.addEventListener('DOMContentLoaded', initApp);
+
+    </script>
+</body>
 </html>
