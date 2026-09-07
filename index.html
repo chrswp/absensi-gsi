@@ -340,8 +340,16 @@
         import { getFirestore, doc, getDoc, setDoc, collection, query, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Environment variables provided by Immersive
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'absensi-gsi-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        //const appId = typeof __app_id !== 'undefined' ? __app_id : 'absensi-gsi-app';
+        //const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const firebaseConfig = {
+          apiKey: "AIzaSyBxejQwAWsYCREgHjJn33h5T5krVGlAJS8",
+          authDomain: "absensi-gsi.firebaseapp.com",
+          projectId: "absensi-gsi",
+          storageBucket: "absensi-gsi.firebasestorage.app",
+          messagingSenderId: "612005681325",
+          appId: "1:612005681325:web:0513b392c236d57db34e24"
+        };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth;
