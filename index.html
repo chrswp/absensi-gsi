@@ -119,9 +119,9 @@
             <!-- Error State (e.g. invalid route) -->
             <div id="error-view" class="hidden flex flex-col items-center justify-center py-20 text-center">
                 <i class="ph ph-warning-circle text-5xl text-red-500 mb-4"></i>
-                <h2 class="text-2xl font-bold text-gray-800 mb-2">Akses Ditolak</h2>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Terjadi Kesalahan</h2>
                 <p class="text-gray-600 max-w-md mx-auto" id="error-message">
-                    Silakan gunakan link yang benar untuk mengakses halaman ini. (Contoh: /#/emp-rio atau /#/emp-deryl)
+                    Pesan error akan muncul di sini.
                 </p>
             </div>
 
@@ -151,7 +151,7 @@
                                 <i class="ph ph-sign-in text-green-500 mr-2"></i> Jam Masuk
                             </label>
                             <div class="flex space-x-2">
-                                <input type="time" id="input-jam-masuk" class="flex-1 border border-gray-300 rounded-lg p-3 text-lg text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-50">
+                                <input type="time" id="input-jam-masuk" readonly class="flex-1 border border-gray-300 rounded-lg p-3 text-lg text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-200 cursor-not-allowed text-gray-600">
                                 <button onclick="setNow('input-jam-masuk')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center whitespace-nowrap">
                                     Sekarang
                                 </button>
@@ -164,7 +164,7 @@
                                 <i class="ph ph-sign-out text-red-500 mr-2"></i> Jam Pulang
                             </label>
                             <div class="flex space-x-2">
-                                <input type="time" id="input-jam-pulang" class="flex-1 border border-gray-300 rounded-lg p-3 text-lg text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-50">
+                                <input type="time" id="input-jam-pulang" readonly class="flex-1 border border-gray-300 rounded-lg p-3 text-lg text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-200 cursor-not-allowed text-gray-600">
                                 <button onclick="setNow('input-jam-pulang')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center whitespace-nowrap">
                                     Sekarang
                                 </button>
@@ -217,7 +217,8 @@
                         <button onclick="refreshReport()" class="flex-1 md:flex-none bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center border border-gray-300">
                             <i class="ph ph-arrows-clockwise mr-2"></i> Muat Ulang
                         </button>
-                        <button onclick="exportToExcel()" class="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors flex items-center justify-center">
+                        <!-- Updated onclick to pass the button reference for loading state -->
+                        <button onclick="exportToExcel(this)" class="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors flex items-center justify-center">
                             <i class="ph ph-file-xls mr-2 text-xl"></i> Export Excel
                         </button>
                     </div>
@@ -339,22 +340,21 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, collection, query, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // =========================================================================
+        // 1. KONFIGURASI FIREBASE ANDA (PASTE DI SINI JIKA HOSTING DI GITHUB PAGES)
+        // =========================================================================
+        const manualFirebaseConfig = null; 
+
         // Environment variables provided by Immersive
-        //const appId = typeof __app_id !== 'undefined' ? __app_id : 'absensi-gsi-app';
-        //const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const firebaseConfig = {
-          apiKey: "AIzaSyBxejQwAWsYCREgHjJn33h5T5krVGlAJS8",
-          authDomain: "absensi-gsi.firebaseapp.com",
-          projectId: "absensi-gsi",
-          storageBucket: "absensi-gsi.firebasestorage.app",
-          messagingSenderId: "612005681325",
-          appId: "1:612005681325:web:0513b392c236d57db34e24"
-        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'absensi-gsi-app';
+        const envFirebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const firebaseConfig = envFirebaseConfig || manualFirebaseConfig;
 
         let app, db, auth;
         let currentUserUid = null;
-        let empRouteId = null; // The ID from URL hash e.g., 'emp-rio'
+        let empRouteId = null; 
         
         // Application State
         const state = {
@@ -366,7 +366,7 @@
             currentTab: 'daily',
             dailyDate: dayjs().format('YYYY-MM-DD'),
             monthlyReportMonth: dayjs().format('YYYY-MM'),
-            monthlyData: {} // Cache for current month's data
+            monthlyData: {}
         };
 
         // Export globals for inline HTML event handlers
@@ -380,7 +380,6 @@
         window.saveSettings = saveSettings;
         window.handleTableEdit = handleTableEdit;
 
-        // Utility: Toast Notification (Replacing alert)
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -388,73 +387,75 @@
             const bgColor = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : 'bg-indigo-600');
             const icon = type === 'success' ? 'ph-check-circle' : (type === 'error' ? 'ph-warning-circle' : 'ph-info');
 
-            toast.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 transform transition-all duration-300 translate-y-10 opacity-0`;
+            toast.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 transform transition-all duration-300 translate-y-10 opacity-0 max-w-sm`;
             toast.innerHTML = `
-                <i class="ph ${icon} text-xl"></i>
-                <span class="font-medium">${message}</span>
+                <i class="ph ${icon} text-xl shrink-0"></i>
+                <span class="font-medium text-sm leading-snug">${message}</span>
             `;
             
             container.appendChild(toast);
             
-            // Animate in
             requestAnimationFrame(() => {
                 toast.classList.remove('translate-y-10', 'opacity-0');
             });
 
-            // Animate out and remove
             setTimeout(() => {
                 toast.classList.add('translate-y-10', 'opacity-0');
                 setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            }, type === 'error' ? 5000 : 3000); // Pesan error tampil lebih lama
         }
 
-        // Utility: Format Currency
         function formatRupiah(number) {
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
         }
 
-        // Initialize Application
         async function initApp() {
-            if (!firebaseConfig) {
-                showError("Konfigurasi database tidak ditemukan.");
-                return;
-            }
-
             try {
-                // Parse routing from hash
                 const hash = window.location.hash;
+                
+                document.getElementById('view-daily').classList.add('hidden');
+                document.getElementById('view-monthly').classList.add('hidden');
+                document.getElementById('view-settings').classList.add('hidden');
+                document.getElementById('error-view').classList.add('hidden');
+                document.getElementById('nav-tabs').style.display = 'none';
+                document.getElementById('mobile-menu-btn-container').style.display = 'none';
+
                 if (!hash || !hash.startsWith('#/emp-')) {
-                    showError("Invalid Route. Gunakan link spesifik seperti /#/emp-rio");
+                    document.getElementById('loading-spinner').classList.add('hidden');
+                    showError("Akses Ditolak. Gunakan link khusus absensi yang diberikan kepada Anda (contoh: /#/emp-nama).");
+                    return;
+                }
+
+                document.getElementById('loading-spinner').classList.remove('hidden');
+
+                if (!firebaseConfig) {
+                    showError("Konfigurasi database tidak ditemukan.");
                     return;
                 }
                 
-                empRouteId = hash.replace('#/', ''); // e.g., 'emp-rio'
+                empRouteId = hash.replace('#/', ''); 
                 
-                // Init Firebase
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
+                if (!app) {
+                    app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
 
-                // Authenticate (Crucial for Firestore rules)
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    currentUserUid = auth.currentUser.uid;
+                    
+                    setupListeners();
                 }
-                currentUserUid = auth.currentUser.uid;
 
-                // Load user specific settings
                 await loadSettings();
                 
-                // Setup UI Listeners
-                setupListeners();
-
-                // Hide Loading, Show App
                 document.getElementById('loading-spinner').classList.add('hidden');
                 document.getElementById('nav-tabs').style.display = 'flex';
                 document.getElementById('mobile-menu-btn-container').style.display = 'flex';
                 
-                // Initialize active tab
                 switchTab('daily');
                 
             } catch (error) {
@@ -469,7 +470,6 @@
             document.getElementById('error-message').textContent = msg;
         }
 
-        // Firestore Helper: Get path to user's collection
         function getUserDocRef(collectionName, docId) {
             return doc(db, 'artifacts', appId, 'users', currentUserUid, `${empRouteId}_${collectionName}`, docId);
         }
@@ -485,16 +485,12 @@
                 if (docSnap.exists()) {
                     state.settings = { ...state.settings, ...docSnap.data() };
                 } else {
-                    // Default naming based on route if new
                     const defaultName = empRouteId.replace('emp-', '').toUpperCase();
                     state.settings.namaLengkap = `Driver ${defaultName}`;
                     await setDoc(settingsRef, state.settings);
                 }
 
-                // Update UI
                 document.getElementById('header-driver-name').textContent = state.settings.namaLengkap;
-                
-                // Populate Settings Form
                 document.getElementById('setting-user-id').value = empRouteId;
                 document.getElementById('setting-nama').value = state.settings.namaLengkap;
                 document.getElementById('setting-upah-harian').value = state.settings.upahHarian;
@@ -525,7 +521,6 @@
                 document.getElementById('header-driver-name').textContent = state.settings.namaLengkap;
                 showToast("Pengaturan berhasil disimpan");
                 
-                // Reload report if we are on report tab to reflect new pricing
                 if (state.currentTab === 'monthly') {
                     loadMonthlyData();
                 }
@@ -539,7 +534,6 @@
         }
 
         async function loadDailyData(dateStr) {
-            // Reset form
             document.getElementById('input-jam-masuk').value = '';
             document.getElementById('input-jam-pulang').value = '';
             document.getElementById('input-lembur-mulai').value = '';
@@ -558,9 +552,7 @@
                     document.getElementById('input-lembur-selesai').value = data.lemburSelesai || '';
                     document.getElementById('input-jam-lembur').value = data.jamLembur || '';
                 }
-            } catch (error) {
-                console.error("Error loading daily data:", error);
-            }
+            } catch (error) {}
         }
 
         async function saveDailyData() {
@@ -576,7 +568,6 @@
                 const lemburSelesai = document.getElementById('input-lembur-selesai').value;
                 let jamLembur = parseFloat(document.getElementById('input-jam-lembur').value) || 0;
 
-                // Auto calculate overtime if manual input is empty but checkin/out exists
                 if (jamLembur === 0 && jamMasuk && jamPulang) {
                     jamLembur = calculateOvertimeLogic(jamPulang);
                     if(jamLembur > 0) {
@@ -597,7 +588,6 @@
                 await setDoc(getUserDocRef('absensi', state.dailyDate), data);
                 showToast("Absensi tanggal " + dayjs(state.dailyDate).format('DD MMM') + " tersimpan!");
             } catch (error) {
-                console.error("Error saving daily data:", error);
                 showToast("Gagal menyimpan data", "error");
             } finally {
                 btn.innerHTML = originalHtml;
@@ -613,14 +603,12 @@
             document.getElementById('table-loading-overlay').classList.remove('hidden');
 
             try {
-                // We fetch all records and filter in memory as per rules
                 const q = query(getUserCollectionRef('absensi'));
                 const querySnapshot = await getDocs(q);
                 
                 state.monthlyData = {};
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
-                    // Filter by selected month string (YYYY-MM)
                     if (data.date && data.date.startsWith(yyyymm)) {
                         state.monthlyData[data.date] = data;
                     }
@@ -628,7 +616,6 @@
 
                 renderMonthlyTable();
             } catch (error) {
-                console.error("Error loading monthly data:", error);
                 showToast("Gagal memuat laporan", "error");
             } finally {
                 document.getElementById('table-loading-overlay').classList.add('hidden');
@@ -650,27 +637,30 @@
                 const dateStr = `${year}-${month}-${String(i).padStart(2, '0')}`;
                 const dateObj = dayjs(dateStr);
                 const dayName = dateObj.format('dddd');
-                const isWeekend = dateObj.day() === 0 || dateObj.day() === 6; // Sunday or Saturday
+                const isWeekend = dateObj.day() === 0 || dateObj.day() === 6; 
                 
                 const data = state.monthlyData[dateStr] || {};
                 
-                // Calculations
                 const upahHarian = (data.jamMasuk || data.jamPulang) ? state.settings.upahHarian : 0;
                 const jamLembur = parseFloat(data.jamLembur) || 0;
                 const upahLembur = jamLembur * state.settings.upahLemburPerJam;
                 const totalUpahHari = upahHarian + upahLembur;
 
-                // Accumulate
                 sumUpahHarian += upahHarian;
                 sumJamLembur += jamLembur;
                 sumUpahLembur += upahLembur;
 
                 const tr = document.createElement('tr');
-                if (isWeekend) tr.classList.add('bg-pink-50'); // Weekend highlight
+                if (isWeekend) tr.classList.add('bg-pink-50');
                 else tr.classList.add('hover:bg-gray-50');
 
-                // Helper to create input fields inside table
-                const createInput = (field, type, width = 'w-full') => {
+                const createInput = (field, type, width = 'w-full', isReadonly = false) => {
+                    if (isReadonly) {
+                        return `<input type="text" 
+                                value="${data[field] || ''}" 
+                                class="${width} bg-transparent border-none text-gray-500 cursor-not-allowed outline-none px-1 py-1 text-center font-mono text-sm font-bold" 
+                                readonly placeholder="-">`;
+                    }
                     return `<input type="${type}" 
                             value="${data[field] || ''}" 
                             class="${width} bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:bg-white outline-none px-1 py-1 text-center font-mono text-sm transition-colors" 
@@ -682,8 +672,8 @@
                 tr.innerHTML = `
                     <td class="px-3 py-2 whitespace-nowrap text-gray-900 font-medium sticky left-0 ${isWeekend ? 'bg-pink-50' : 'bg-white'} z-0 shadow-[1px_0_0_0_#e5e7eb]">${i}</td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-500">${dayName.toUpperCase()}</td>
-                    <td class="px-1 py-1 border-l border-gray-200">${createInput('jamMasuk', 'time')}</td>
-                    <td class="px-1 py-1">${createInput('jamPulang', 'time')}</td>
+                    <td class="px-1 py-1 border-l border-gray-200">${createInput('jamMasuk', 'time', 'w-full', true)}</td>
+                    <td class="px-1 py-1">${createInput('jamPulang', 'time', 'w-full', true)}</td>
                     <td class="px-3 py-2 whitespace-nowrap text-right text-gray-900 bg-indigo-50/30">${formatRupiah(upahHarian)}</td>
                     <td class="px-1 py-1 border-l border-gray-200">${createInput('lemburMulai', 'time')}</td>
                     <td class="px-1 py-1">${createInput('lemburSelesai', 'time')}</td>
@@ -694,21 +684,17 @@
                 tbody.appendChild(tr);
             }
 
-            // Update footer totals
             document.getElementById('total-upah-harian').textContent = formatRupiah(sumUpahHarian);
             document.getElementById('total-jam-lembur').textContent = sumJamLembur + ' Jam';
             document.getElementById('total-upah-lembur').textContent = formatRupiah(sumUpahLembur);
             document.getElementById('grand-total-upah').textContent = formatRupiah(sumUpahHarian + sumUpahLembur);
         }
 
-        // Inline edit handler for the monthly table
         async function handleTableEdit(dateStr, field, value) {
-            // Update local state immediately for snappy feel
             if (!state.monthlyData[dateStr]) {
                 state.monthlyData[dateStr] = { date: dateStr };
             }
             
-            // Basic Auto-calculate overtime in table if checking out late and lembur is 0 or empty
             if (field === 'jamPulang') {
                 state.monthlyData[dateStr][field] = value;
                 const currentLembur = state.monthlyData[dateStr].jamLembur;
@@ -722,17 +708,13 @@
                 state.monthlyData[dateStr][field] = value;
             }
 
-            // Re-render table to update calculations
             renderMonthlyTable();
 
-            // Save to Firestore in background
             try {
                 const docRef = getUserDocRef('absensi', dateStr);
                 const dataToSave = { ...state.monthlyData[dateStr], timestamp: new Date().toISOString() };
                 await setDoc(docRef, dataToSave, { merge: true });
-                // Optional: show tiny toast or indicator that it saved
             } catch (error) {
-                console.error("Error saving inline edit:", error);
                 showToast("Gagal menyimpan perubahan ke server", "error");
             }
         }
@@ -740,16 +722,13 @@
         function switchTab(tabId) {
             state.currentTab = tabId;
             
-            // Hide all views
             ['daily', 'monthly', 'settings'].forEach(id => {
                 document.getElementById(`view-${id}`).classList.add('hidden');
-                // Reset desktop tab styles
                 const dTab = document.getElementById(`tab-${id}`);
                 if(dTab) {
                     dTab.classList.remove('bg-indigo-800', 'text-white');
                     dTab.classList.add('text-indigo-100');
                 }
-                // Reset mobile tab styles
                 const mTab = document.getElementById(`mobile-tab-${id}`);
                 if(mTab) {
                     mTab.classList.remove('bg-indigo-800', 'text-white');
@@ -757,24 +736,20 @@
                 }
             });
 
-            // Show selected view
             document.getElementById(`view-${tabId}`).classList.remove('hidden');
             
-            // Active style for desktop
             const activeDTab = document.getElementById(`tab-${tabId}`);
             if(activeDTab){
                 activeDTab.classList.remove('text-indigo-100');
                 activeDTab.classList.add('bg-indigo-800', 'text-white');
             }
             
-            // Active style for mobile
             const activeMTab = document.getElementById(`mobile-tab-${tabId}`);
             if(activeMTab) {
                  activeMTab.classList.remove('text-indigo-100');
                  activeMTab.classList.add('bg-indigo-800', 'text-white');
             }
 
-            // Tab specific logic
             if (tabId === 'daily') {
                 updateDailyDateUI();
                 loadDailyData(state.dailyDate);
@@ -790,8 +765,23 @@
         }
 
         function setNow(inputId) {
+            // Validasi: Hanya bisa absen di hari ini
+            if (state.dailyDate !== dayjs().format('YYYY-MM-DD')) {
+                showToast("Absensi realtime hanya bisa dilakukan untuk hari ini.", "error");
+                return;
+            }
+            
+            // Validasi: Tidak bisa ditimpa/diedit jika sudah ada jamnya
+            const el = document.getElementById(inputId);
+            if (el.value) {
+                showToast("Waktu sudah tercatat dan tidak bisa diedit ulang.", "error");
+                return;
+            }
+
+            // Terapkan jam sekarang
             const now = dayjs().format('HH:mm');
-            document.getElementById(inputId).value = now;
+            el.value = now;
+            showToast("Waktu tercatat! Jangan lupa klik Simpan Absensi.");
         }
 
         function updateDailyDateUI() {
@@ -810,13 +800,11 @@
             }
         }
 
+        let listenersSetup = false;
         function setupListeners() {
-            // Hash change listener (for single page routing)
-            window.addEventListener('hashchange', () => {
-                window.location.reload(); // Simple approach: reload to re-init app with new route
-            });
+            if (listenersSetup) return; 
+            listenersSetup = true;
 
-            // Date picker listener
             document.getElementById('daily-date-input').addEventListener('change', (e) => {
                 if (e.target.value) {
                     state.dailyDate = e.target.value;
@@ -826,7 +814,6 @@
                 }
             });
 
-            // Month selector listener
             document.getElementById('report-month-selector').addEventListener('change', (e) => {
                 if(e.target.value) {
                     loadMonthlyData();
@@ -834,123 +821,153 @@
             });
         }
 
-        // Logic helper: Auto calculate overtime (assuming normal end time is 17:00)
         function calculateOvertimeLogic(jamPulang) {
             if (!jamPulang) return 0;
             const [hours, minutes] = jamPulang.split(':').map(Number);
             if (hours >= 17) {
-                // Calculate difference from 17:00
                 const diffMin = ((hours - 17) * 60) + minutes;
-                // Round down to nearest 0.5 hour
                 return Math.floor(diffMin / 30) * 0.5;
             }
             return 0;
         }
 
-        function exportToExcel() {
-            const yyyymm = state.monthlyReportMonth;
-            const [year, month] = yyyymm.split('-');
-            const monthName = dayjs(`${year}-${month}-01`).format('MMMM').toUpperCase();
-            const daysInMonth = dayjs(`${year}-${month}-01`).daysInMonth();
+        // ==========================================
+        // PERBAIKAN EXPORT EXCEL (DENGAN TRY-CATCH)
+        // ==========================================
+        async function exportToExcel(btn) {
+            const originalHtml = btn ? btn.innerHTML : '<i class="ph ph-file-xls mr-2 text-xl"></i> Export Excel';
             
-            const ws_data = [];
-            
-            // Custom Header matching the request
-            const titleRow = [`ABSENSI DRIVER CHAIRMAN : ${state.settings.namaLengkap.toUpperCase()}`, '', '', '', '', '', '', '', '', `( ${monthName} ${year} )`];
-            ws_data.push(titleRow);
-            ws_data.push([]); // Empty row
-            ws_data.push([`Made on : ${dayjs().format('DD-MMM-YY')}`]);
-            
-            // Table Headers (Complex Rowspan/Colspan setup using SheetJS concepts)
-            ws_data.push([
-                "HARI", "TGL", "BULAN", "HARI KERJA", 
-                "JAM KERJA NORMAL", "", "", 
-                "JAM KERJA LEMBUR", "", "", "", 
-                "PEMERIKSAAN & KEPUTUSAN PIMPINAN", "", ""
-            ]);
-            ws_data.push([
-                "", "", "", "", 
-                "JAM MASUK", "JAM PULANG", "UPAH HARIAN (RP)", 
-                "MULAI JAM", "SELESAI JAM", "JAM LEMBUR", "PARAF SUPIR", 
-                "UPAH LEMBUR (RP)", "UPAH HARIAN+LEMBUR (RP)", "PARAF PIMPINAN"
-            ]);
-
-            let sumUpahHarian = 0;
-            let sumUpahLembur = 0;
-
-            // Generate Data Rows
-            for (let i = 1; i <= daysInMonth; i++) {
-                const dateStr = `${year}-${month}-${String(i).padStart(2, '0')}`;
-                const dateObj = dayjs(dateStr);
-                const data = state.monthlyData[dateStr] || {};
-                
-                const upahHarian = (data.jamMasuk || data.jamPulang) ? state.settings.upahHarian : 0;
-                const jamLembur = parseFloat(data.jamLembur) || 0;
-                const upahLembur = jamLembur * state.settings.upahLemburPerJam;
-                const totalUpahHari = upahHarian + upahLembur;
-
-                sumUpahHarian += upahHarian;
-                sumUpahLembur += upahLembur;
-
-                const row = [
-                    dateObj.format('dddd').toUpperCase(),
-                    i,
-                    dateObj.format('MMM').toUpperCase(),
-                    "KE :",
-                    data.jamMasuk || "",
-                    data.jamPulang || "",
-                    upahHarian || "",
-                    data.lemburMulai || "",
-                    data.lemburSelesai || "",
-                    jamLembur || "",
-                    "", // Paraf Supir
-                    upahLembur || "",
-                    totalUpahHari || "",
-                    "" // Paraf Pimpinan
-                ];
-                ws_data.push(row);
+            // Tampilkan animasi loading di tombol
+            if (btn) {
+                btn.innerHTML = '<i class="ph ph-spinner-gap animate-spin mr-2 text-xl"></i> Mengekspor...';
+                btn.disabled = true;
             }
 
-            // Footer / Totals Row
-            const footerRow = [
-                "TOTAL UPAH & LEMBUR :", "", "", "", "", "", 
-                sumUpahHarian, "", "", "", "", 
-                sumUpahLembur, sumUpahHarian + sumUpahLembur, ""
-            ];
-            ws_data.push(footerRow);
+            try {
+                // Jeda 50ms agar UI browser memiliki waktu merender tombol "Mengekspor..."
+                await new Promise(resolve => setTimeout(resolve, 50));
 
-            // Create Workbook & Worksheet
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(ws_data);
+                const yyyymm = state.monthlyReportMonth;
+                const [year, month] = yyyymm.split('-');
+                const monthName = dayjs(`${year}-${month}-01`).format('MMMM').toUpperCase();
+                const daysInMonth = dayjs(`${year}-${month}-01`).daysInMonth();
+                
+                const ws_data = [];
+                
+                // Perlindungan variabel nama agar tidak crash jika belum tersetting
+                const driverName = (state.settings.namaLengkap || 'DRIVER').toUpperCase();
+                
+                const titleRow = [`ABSENSI DRIVER CHAIRMAN : ${driverName}`, '', '', '', '', '', '', '', '', `( ${monthName} ${year} )`];
+                ws_data.push(titleRow);
+                ws_data.push([]); 
+                ws_data.push([`Made on : ${dayjs().format('DD-MMM-YY')}`]);
+                
+                ws_data.push([
+                    "HARI", "TGL", "BULAN", "HARI KERJA", 
+                    "JAM KERJA NORMAL", "", "", 
+                    "JAM KERJA LEMBUR", "", "", "", 
+                    "PEMERIKSAAN & KEPUTUSAN PIMPINAN", "", ""
+                ]);
+                ws_data.push([
+                    "", "", "", "", 
+                    "JAM MASUK", "JAM PULANG", "UPAH HARIAN (RP)", 
+                    "MULAI JAM", "SELESAI JAM", "JAM LEMBUR", "PARAF SUPIR", 
+                    "UPAH LEMBUR (RP)", "UPAH HARIAN+LEMBUR (RP)", "PARAF PIMPINAN"
+                ]);
 
-            // Merges (A4:A5 for HARI, etc)
-            ws['!merges'] = [
-                { s: { r: 3, c: 4 }, e: { r: 3, c: 6 } }, // JAM KERJA NORMAL
-                { s: { r: 3, c: 7 }, e: { r: 3, c: 10 } }, // JAM KERJA LEMBUR
-                { s: { r: 3, c: 11 }, e: { r: 3, c: 13 } }, // PEMERIKSAAN
-                // Vertical merges for headers
-                { s: { r: 3, c: 0 }, e: { r: 4, c: 0 } }, // HARI
-                { s: { r: 3, c: 1 }, e: { r: 4, c: 1 } }, // TGL
-                { s: { r: 3, c: 2 }, e: { r: 4, c: 2 } }, // BULAN
-                { s: { r: 3, c: 3 }, e: { r: 4, c: 3 } }, // HARI KERJA
-                // Merge for Total text
-                { s: { r: ws_data.length - 1, c: 0 }, e: { r: ws_data.length - 1, c: 5 } },
-            ];
+                let sumUpahHarian = 0;
+                let sumUpahLembur = 0;
 
-            // Column Widths
-            ws['!cols'] = [
-                {wch: 10}, {wch: 5}, {wch: 8}, {wch: 10}, 
-                {wch: 12}, {wch: 12}, {wch: 18},
-                {wch: 12}, {wch: 12}, {wch: 12}, {wch: 12},
-                {wch: 18}, {wch: 22}, {wch: 18}
-            ];
+                for (let i = 1; i <= daysInMonth; i++) {
+                    const dateStr = `${year}-${month}-${String(i).padStart(2, '0')}`;
+                    const dateObj = dayjs(dateStr);
+                    const data = state.monthlyData[dateStr] || {};
+                    
+                    const upahHarian = (data.jamMasuk || data.jamPulang) ? state.settings.upahHarian : 0;
+                    const jamLembur = parseFloat(data.jamLembur) || 0;
+                    const upahLembur = jamLembur * state.settings.upahLemburPerJam;
+                    const totalUpahHari = upahHarian + upahLembur;
 
-            XLSX.utils.book_append_sheet(wb, ws, "Absensi");
-            XLSX.writeFile(wb, `Absensi_${state.settings.namaLengkap.replace(/\s+/g, '_')}_${monthName}_${year}.xlsx`);
+                    sumUpahHarian += upahHarian;
+                    sumUpahLembur += upahLembur;
+
+                    const row = [
+                        dateObj.format('dddd').toUpperCase(),
+                        i,
+                        dateObj.format('MMM').toUpperCase(),
+                        "KE :",
+                        data.jamMasuk || "",
+                        data.jamPulang || "",
+                        upahHarian || "",
+                        data.lemburMulai || "",
+                        data.lemburSelesai || "",
+                        jamLembur || "",
+                        "", 
+                        upahLembur || "",
+                        totalUpahHari || "",
+                        "" 
+                    ];
+                    ws_data.push(row);
+                }
+
+                const footerRow = [
+                    "TOTAL UPAH & LEMBUR :", "", "", "", "", "", 
+                    sumUpahHarian, "", "", "", "", 
+                    sumUpahLembur, sumUpahHarian + sumUpahLembur, ""
+                ];
+                ws_data.push(footerRow);
+
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.aoa_to_sheet(ws_data);
+
+                ws['!merges'] = [
+                    { s: { r: 3, c: 4 }, e: { r: 3, c: 6 } }, 
+                    { s: { r: 3, c: 7 }, e: { r: 3, c: 10 } }, 
+                    { s: { r: 3, c: 11 }, e: { r: 3, c: 13 } }, 
+                    { s: { r: 3, c: 0 }, e: { r: 4, c: 0 } }, 
+                    { s: { r: 3, c: 1 }, e: { r: 4, c: 1 } }, 
+                    { s: { r: 3, c: 2 }, e: { r: 4, c: 2 } }, 
+                    { s: { r: 3, c: 3 }, e: { r: 4, c: 3 } }, 
+                    { s: { r: ws_data.length - 1, c: 0 }, e: { r: ws_data.length - 1, c: 5 } },
+                ];
+
+                ws['!cols'] = [
+                    {wch: 10}, {wch: 5}, {wch: 8}, {wch: 10}, 
+                    {wch: 12}, {wch: 12}, {wch: 18},
+                    {wch: 12}, {wch: 12}, {wch: 12}, {wch: 12},
+                    {wch: 18}, {wch: 22}, {wch: 18}
+                ];
+
+                XLSX.utils.book_append_sheet(wb, ws, "Absensi");
+                
+                // Men-trigger download menggunakan utilitas SheetJS
+                XLSX.writeFile(wb, `Absensi_${driverName.replace(/\s+/g, '_')}_${monthName}_${year}.xlsx`);
+                
+                showToast("File Excel berhasil diunduh!", "success");
+
+            } catch (error) {
+                console.error("Export Excel error:", error);
+                
+                // Menangkap apabila environment tidak mengizinkan pengunduhan file (spt iframe strict sandbox)
+                if (error.message && error.message.toLowerCase().includes('download')) {
+                    showToast("Download diblokir karena sistem Preview. Silakan buka aplikasi pada halaman terpisah (misal di Github Pages) untuk mengunduh Excel.", "error");
+                } else {
+                    showToast("Terjadi kesalahan saat membuat Excel: Coba jalankan di luar mode Preview.", "error");
+                }
+            } finally {
+                // Kembalikan teks dan fungsi tombol ke semula
+                if (btn) {
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+                }
+            }
         }
 
-        // Start App
-        window.addEventListener('DOMContentLoaded', initApp);
+        window.addEventListener('hashchange', () => {
+            initApp();
+        });
+
+        initApp();
 
     </script>
 </body>
